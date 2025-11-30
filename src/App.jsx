@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 
+// Complete credit card data with all 8 cards
 const CREDIT_CARDS = {
   "Citi Double Cash": {
     color: "from-red-600 to-orange-600",
@@ -12,7 +13,7 @@ const CREDIT_CARDS = {
   "Citi Custom Cash": {
     color: "from-cyan-500 to-blue-600",
     rewards: [
-      { category: "Highest spend category", multiplier: "5% cash back", 
+      { category: "Highest spend category", multiplier: "5% cash back",
         details: "Up to $500/month - Categories: Restaurants, Gas Stations, Grocery Stores, Select Travel, Select Transit, Select Streaming, Drugstores, Home Improvement, Fitness Clubs, Live Entertainment" },
       { category: "Hotels, car rentals, attractions (Citi Travel)", multiplier: "5% cash back", details: "4% additional + 1% base, through 6/30/2026" },
       { category: "After $500 in highest category", multiplier: "1% cash back" },
@@ -88,14 +89,14 @@ const CREDIT_CARDS = {
 };
 
 const QUICK_CATEGORIES = [
-  { id: 'dining', label: 'Dining', icon: 'ðŸ½ï¸', query: 'restaurant dinner' },
-  { id: 'grocery', label: 'Grocery', icon: 'ðŸ›’', query: 'grocery store supermarket' },
-  { id: 'gas', label: 'Gas', icon: 'â›½', query: 'gas station fuel' },
-  { id: 'online', label: 'Online', icon: 'ðŸ›ï¸', query: 'online shopping amazon retail' },
-  { id: 'hotel', label: 'Hotel', icon: 'ðŸ¨', query: 'hotel booking accommodation' },
-  { id: 'flight', label: 'Flights', icon: 'âœˆï¸', query: 'airline flight ticket' },
-  { id: 'streaming', label: 'Streaming', icon: 'ðŸ“º', query: 'netflix streaming subscription' },
-  { id: 'rent', label: 'Rent', icon: 'ðŸ ', query: 'rent payment apartment' },
+  { id: 'dining', label: 'Dining', icon: '🍽️', query: 'restaurant dinner' },
+  { id: 'grocery', label: 'Grocery', icon: '🛒', query: 'grocery store supermarket' },
+  { id: 'gas', label: 'Gas', icon: '⛽', query: 'gas station fuel' },
+  { id: 'online', label: 'Online', icon: '🛍️', query: 'online shopping amazon retail' },
+  { id: 'hotel', label: 'Hotel', icon: '🏨', query: 'hotel booking accommodation' },
+  { id: 'flight', label: 'Flights', icon: '✈️', query: 'airline flight ticket' },
+  { id: 'streaming', label: 'Streaming', icon: '📺', query: 'netflix streaming subscription' },
+  { id: 'rent', label: 'Rent', icon: '🏠', query: 'rent payment apartment' },
 ];
 
 export default function CreditCardOptimizer() {
@@ -115,7 +116,7 @@ export default function CreditCardOptimizer() {
       'Bilt portal',
       'through portal'
     ];
-    return portalIndicators.some(indicator => 
+    return portalIndicators.some(indicator =>
       category.toLowerCase().includes(indicator.toLowerCase())
     );
   };
@@ -124,160 +125,108 @@ export default function CreditCardOptimizer() {
     const queryToUse = searchQuery || query;
     if (!queryToUse.trim()) return;
     if (loading) return;
-    
+
     setLoading(true);
     setRecommendation(null);
 
-    // Helper function to extract and parse JSON from response
-    const extractJSON = (text) => {
-      // Remove markdown code fences
-      let cleaned = text.trim()
-        .replace(/```json\s*/gi, '')
-        .replace(/```\s*/gi, '')
-        .trim();
-      
-      // Strategy 1: Direct parse
-      try {
-        return JSON.parse(cleaned);
-      } catch (e) {
-        // Continue to next strategy
-      }
-      
-      // Strategy 2: Find JSON object with brace counting
-      const match = cleaned.match(/\{[\s\S]*"cards"[\s\S]*\]/);
-      if (match) {
-        let braceCount = 0, startIdx = match.index, endIdx = startIdx;
-        for (let i = startIdx; i < cleaned.length; i++) {
-          if (cleaned[i] === '{') braceCount++;
-          if (cleaned[i] === '}') braceCount--;
-          if (braceCount === 0) { endIdx = i + 1; break; }
-        }
-        try {
-          return JSON.parse(cleaned.substring(startIdx, endIdx));
-        } catch (e) {
-          // Continue to next strategy
-        }
-      }
-      
-      // Strategy 3: Extract just the cards array
-      const cardsMatch = cleaned.match(/"cards"\s*:\s*\[([\s\S]*?)\]/);
-      if (cardsMatch) {
-        try {
-          return JSON.parse(`{"cards":${cardsMatch[0].split(':')[1]}}`);
-        } catch (e) {
-          // Failed all strategies
-        }
-      }
-      
-      throw new Error('Could not extract valid JSON');
-    };
+    // Prepare card info for the backend
+    const cardInfo = Object.entries(CREDIT_CARDS).map(([name, card]) => {
+      // Filter out portal rewards if toggle is enabled
+      const rewards = excludePortals
+        ? card.rewards.filter(r => !isPortalReward(r.category))
+        : card.rewards;
 
-    // Increase to 3 attempts with exponential backoff
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        // Exponential backoff: 1s, 2s, 4s
-        const delay = Math.pow(2, attempt - 1) * 1000;
-        await new Promise(resolve => setTimeout(resolve, delay));
+      // Skip cards with no rewards after filtering
+      if (rewards.length === 0) return null;
 
-        console.log(`Attempt ${attempt}/3: Analyzing "${queryToUse}"`);
-
-        const cardInfo = Object.entries(CREDIT_CARDS).map(([name, card]) => {
-          // Filter out portal rewards if toggle is enabled
-          const rewards = excludePortals 
-            ? card.rewards.filter(r => !isPortalReward(r.category))
-            : card.rewards;
-          
-          // Skip cards with no rewards after filtering
-          if (rewards.length === 0) return null;
-          
-          return `
+      return `
 ${name}:
 ${rewards.map(r => `- ${r.category}: ${r.multiplier}${r.details ? ` (${r.details})` : ''}`).join('\n')}
 ${card.specialRules ? `\nSpecial: ${card.specialRules}` : ''}`;
-        }).filter(Boolean).join('\n---\n');
+    }).filter(Boolean).join('\n---\n');
 
-        const response = await fetch("https://api.anthropic.com/v1/messages", {
+    // Retry with exponential backoff (3 attempts)
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        // Exponential backoff: 0s, 2s, 4s
+        if (attempt > 1) {
+          const delay = Math.pow(2, attempt - 1) * 1000;
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+
+        console.log(`Attempt ${attempt}/3: Analyzing "${queryToUse}"`);
+
+        // Call the backend API instead of Anthropic directly
+        const response = await fetch("/api/analyze", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json"
+          },
           body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 1800,
-            messages: [{ 
-              role: "user", 
-              content: `Analyze this purchase: "${queryToUse}"
-
-Cards available:
-${cardInfo}
-
-CRITICAL: You must respond with ONLY valid JSON. No explanatory text before or after.
-
-Provide the TOP 2 best cards for this purchase in this EXACT format:
-{"cards":[{"card":"exact card name","rate":"#x points/miles/% cash back","reason":"brief explanation"},{"card":"exact card name","rate":"#x points/miles/% cash back","reason":"brief explanation"}]}
-
-DO NOT include markdown, code fences, or any text outside the JSON object.` 
-            }]
+            query: queryToUse,
+            cardInfo: cardInfo
           })
         });
 
         if (!response.ok) {
-          const errorText = await response.text().catch(() => 'Unknown error');
-          console.error(`Attempt ${attempt}: API returned ${response.status}`, errorText);
-          if (attempt === 3) throw new Error(`API error ${response.status}`);
+          const errorData = await response.json().catch(() => ({}));
+          console.error(`Attempt ${attempt}: API returned ${response.status}`, errorData);
+
+          // Handle rate limiting
+          if (response.status === 429) {
+            throw new Error('Rate limit exceeded. Please wait a moment and try again.');
+          }
+
+          if (attempt === 3) {
+            throw new Error(errorData.error || `API error ${response.status}`);
+          }
           continue;
         }
 
         const data = await response.json();
-        if (!data.content?.[0]?.text) {
-          console.error(`Attempt ${attempt}: No content in API response`, data);
-          if (attempt === 3) throw new Error('Empty API response');
-          continue;
-        }
-        
-        console.log(`Attempt ${attempt}: Received response, parsing JSON...`);
-        const result = extractJSON(data.content[0].text);
-        
+
         // Validate result
-        if (!result.cards || !Array.isArray(result.cards)) {
-          console.error(`Attempt ${attempt}: No cards array in result`, result);
-          if (attempt === 3) throw new Error('Invalid response structure');
+        if (!data.cards || !Array.isArray(data.cards)) {
+          console.error(`Attempt ${attempt}: Invalid response structure`, data);
+          if (attempt === 3) throw new Error('Invalid response from server');
           continue;
         }
-        
-        if (result.cards.length < 1) {
-          console.error(`Attempt ${attempt}: Empty cards array`);
-          if (attempt === 3) throw new Error('No cards returned');
+
+        if (data.cards.length < 1) {
+          console.error(`Attempt ${attempt}: No cards returned`);
+          if (attempt === 3) throw new Error('No cards returned from server');
           continue;
         }
-        
-        // Check if cards have required fields (be lenient - accept 1 card if 2 not available)
-        const validCards = result.cards.filter(c => c.card && c.rate && c.reason);
+
+        // Check if cards have required fields
+        const validCards = data.cards.filter(c => c.card && c.rate && c.reason);
         if (validCards.length === 0) {
-          console.error(`Attempt ${attempt}: No valid cards in response`, result.cards);
+          console.error(`Attempt ${attempt}: No valid cards in response`, data.cards);
           if (attempt === 3) throw new Error('Invalid card format');
           continue;
         }
-        
-        // Success! Use valid cards (even if only 1)
-        console.log(`âœ“ Success on attempt ${attempt}`);
+
+        // Success!
+        console.log(`✓ Success on attempt ${attempt}`);
         setRecommendation({ cards: validCards.slice(0, 2) });
         setLoading(false);
         return;
-        
+
       } catch (error) {
         console.error(`Attempt ${attempt} failed:`, error.message, error);
-        
+
         if (attempt === 3) {
-          // Provide more specific error messages
+          // Provide specific error messages
           let errorMsg = 'Unable to analyze. Please try again in a few seconds.';
-          
-          if (error.message.includes('API error')) {
+
+          if (error.message.includes('Rate limit')) {
+            errorMsg = error.message;
+          } else if (error.message.includes('API error')) {
             errorMsg = 'API temporarily unavailable. Please wait and try again.';
-          } else if (error.message.includes('JSON')) {
-            errorMsg = 'Analysis failed. Please rephrase your query and try again.';
           } else if (error.message.includes('Network') || error.message.includes('fetch')) {
             errorMsg = 'Network error. Please check your connection and try again.';
           }
-          
+
           setRecommendation({
             cards: [{
               card: "Analysis Error",
@@ -310,7 +259,7 @@ DO NOT include markdown, code fences, or any text outside the JSON object.`
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 mb-4 shadow-lg shadow-purple-500/30">
-            <span className="text-3xl">ðŸ’³</span>
+            <span className="text-3xl">💳</span>
           </div>
           <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">Card Optimizer</h1>
           <p className="text-purple-200/70">Maximize rewards on every purchase</p>
@@ -320,7 +269,7 @@ DO NOT include markdown, code fences, or any text outside the JSON object.`
         {/* Portal Toggle */}
         <div className="mb-6 flex justify-center">
           <label className="inline-flex items-center gap-3 px-4 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl cursor-pointer hover:bg-white/15 transition-all">
-            <input 
+            <input
               type="checkbox"
               checked={excludePortals}
               onChange={(e) => setExcludePortals(e.target.checked)}
@@ -348,7 +297,7 @@ DO NOT include markdown, code fences, or any text outside the JSON object.`
                 disabled={loading}
                 className={`
                   flex flex-col items-center justify-center p-3 md:p-4 rounded-xl
-                  transition-all duration-200 
+                  transition-all duration-200
                   ${selectedCategory === cat.id && loading
                     ? 'bg-purple-500/40 ring-2 ring-purple-400 scale-95'
                     : 'bg-white/10 hover:bg-white/20 hover:scale-105 active:scale-95'
@@ -406,14 +355,14 @@ DO NOT include markdown, code fences, or any text outside the JSON object.`
                 </span>
               </div>
             )}
-            
+
             {recommendation.cards.map((cardRec, index) => (
               <div
                 key={index}
                 className={`
                   relative overflow-hidden rounded-2xl p-5
-                  ${index === 0 
-                    ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-400/30' 
+                  ${index === 0
+                    ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-400/30'
                     : 'bg-gradient-to-r from-blue-500/20 to-indigo-500/20 border border-blue-400/30'
                   }
                 `}
@@ -423,7 +372,7 @@ DO NOT include markdown, code fences, or any text outside the JSON object.`
                     flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center text-2xl
                     ${index === 0 ? 'bg-emerald-500/30' : 'bg-blue-500/30'}
                   `}>
-                    {index === 0 ? 'ðŸ¥‡' : 'ðŸ¥ˆ'}
+                    {index === 0 ? '🥇' : '🥈'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
@@ -453,8 +402,8 @@ DO NOT include markdown, code fences, or any text outside the JSON object.`
             className="inline-flex items-center gap-2 px-4 py-2 text-purple-200/70 hover:text-white transition-colors"
           >
             <span>{showCards ? 'Hide' : 'View'} All Cards</span>
-            <svg 
-              className={`w-4 h-4 transition-transform ${showCards ? 'rotate-180' : ''}`} 
+            <svg
+              className={`w-4 h-4 transition-transform ${showCards ? 'rotate-180' : ''}`}
               fill="none" stroke="currentColor" viewBox="0 0 24 24"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -467,13 +416,13 @@ DO NOT include markdown, code fences, or any text outside the JSON object.`
           <div className="mt-4 space-y-3 animate-in fade-in slide-in-from-top-4 duration-300">
             {Object.entries(CREDIT_CARDS).map(([name, card]) => {
               // Filter rewards based on portal toggle
-              const displayRewards = excludePortals 
+              const displayRewards = excludePortals
                 ? card.rewards.filter(r => !isPortalReward(r.category))
                 : card.rewards;
-              
+
               // Skip cards with no rewards after filtering
               if (displayRewards.length === 0) return null;
-              
+
               return (
                 <div key={name} className="rounded-2xl overflow-hidden bg-white/5 backdrop-blur-sm border border-white/10">
                   <div className={`bg-gradient-to-r ${card.color} px-5 py-3`}>
@@ -488,7 +437,7 @@ DO NOT include markdown, code fences, or any text outside the JSON object.`
                     ))}
                     {card.specialRules && (
                       <div className="mt-3 pt-3 border-t border-white/10">
-                        <p className="text-xs text-yellow-300/80">âš¡ {card.specialRules}</p>
+                        <p className="text-xs text-yellow-300/80">⚡ {card.specialRules}</p>
                       </div>
                     )}
                   </div>
